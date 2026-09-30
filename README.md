@@ -1,6 +1,6 @@
 # Document RAG Agent
 
-A simple, production-oriented document Q&A system for a 2-hour machine test.
+A simple, production-oriented document Q&A system for a 4-hour machine test.
 
 Users upload PDF, DOCX, or TXT files. The backend chunks and embeds them into Chroma, then a LangGraph RAG workflow retrieves relevant passages and asks a local Ollama model (`llama3.2:3b`) for a grounded answer with source references.
 
