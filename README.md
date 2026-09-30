@@ -1,43 +1,123 @@
 # Document RAG Agent
 
-A simple, production-oriented document Q&A system for a 4-hour machine test.
+A **4-hour AI machine test assignment** to build a document Q&A agent.
 
-Users upload PDF, DOCX, or TXT files. The backend chunks and embeds them into Chroma, then a LangGraph RAG workflow retrieves relevant passages and asks a local Ollama model (`llama3.2:3b`) for a grounded answer with source references.
+Users can upload one or more **PDF, DOCX, or TXT** files and ask questions based only on their document content.
+
+## Tech Stack
+
+* **UI:** Streamlit
+* **Workflow:** LangGraph
+* **Vector DB:** Chroma
+* **Embeddings:** `sentence-transformers/all-MiniLM-L6-v2`
+* **LLM:** Ollama + `llama3.2:3b`
+* **Document Processing:** PyMuPDF, python-docx
+* **Language:** Python
 
 ## Architecture
 
-- **Frontend:** Streamlit (`frontend/streamlit_app.py`) — upload documents, ask questions, show answers and sources.
-- **API:** FastAPI (`app/main.py`) — ingestion and query endpoints.
-- **Ingestion:** `app/ingestion.py` — parse PDF/DOCX/TXT, chunk, embed, persist in Chroma.
-- **RAG:** `app/rag.py` — LangGraph retrieve → generate flow.
-- **Models:** `app/models.py` — request/response schemas.
+```text id="tie9e6"
+Upload Documents
+       ↓
+Parse & Chunk
+       ↓
+MiniLM Embeddings
+       ↓
+Chroma Vector DB
+       ↓
+LangGraph
+       ↓
+Query Validation (Guardrail)
+       ↓
+Retrieve
+       ↓
+Relevance Check (Guardrail)
+   ↙                    ↘
+Not Relevant          Relevant
+    ↓                    ↓
+ Not Found          Generate Answer
+                         ↓
+                        END
+```
 
-Out of scope: Docker, Kubernetes, reranking, authentication, multi-agent workflows, and fine-tuning.
+## RAG Flow
+
+1. Upload one or more documents.
+2. Documents are parsed and split into chunks.
+3. Chunks are converted into embeddings and stored in Chroma.
+4. The user's question is converted into an embedding.
+5. Chroma retrieves the most relevant chunks.
+6. A relevance check verifies whether useful information was found.
+7. Only relevant chunks are sent to the local LLM.
+8. The answer and source references are displayed.
+
+## Guardrails
+
+The application uses lightweight guardrails:
+
+* Empty questions are rejected.
+* Retrieved content is checked for relevance.
+* If relevant information is not found, the system returns:
+
+```text id="6kbook"
+I couldn't find this information in the uploaded documents.
+```
+
+In this case, the LLM is not called.
+
+The LLM is also instructed to answer only from the retrieved document context and not use outside knowledge.
+
+## Project Structure
+
+```text id="c4ycp9"
+document-rag-agent/
+├── app/
+│   ├── ingestion.py
+│   ├── rag.py
+│   ├── vector_store.py
+│   └── models.py
+├── frontend/
+│   └── streamlit_app.py
+├── tests/
+├── requirements.txt
+├── .env.example
+└── README.md
+```
 
 ## Setup
 
-1. Create a virtual environment and install dependencies:
+```bash id="5ya9s9"
+git clone https://github.com/SHREYANSHBHALLA/document-rag-agent.git
+cd document-rag-agent
 
-```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+
+python -m pip install -r requirements.txt
 ```
 
-2. Ensure Ollama is running locally with `llama3.2:3b` pulled. Copy `.env.example` to `.env` if you need to override `CHROMA_PERSIST_DIR`.
+Start Ollama:
 
-3. Run the API:
-
-```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```bash id="n7ycz7"
+ollama run llama3.2:3b
 ```
 
-4. Run the UI:
+Start the application:
 
-```bash
-streamlit run frontend/streamlit_app.py
+```bash id="x7u0rr"
+python -m streamlit run frontend/streamlit_app.py
 ```
 
-## Status
+Open:
 
-Scaffold only. Ingestion, retrieval, and generation are not implemented yet.
+```text id="bdfs33"
+http://localhost:8501
+```
+
+## Testing
+
+```bash id="e4sjcv"
+python tests/test_end_to_end.py
+```
+
+Tests cover document ingestion, retrieval, grounded answers, source references, and handling questions that are not present in the documents.
