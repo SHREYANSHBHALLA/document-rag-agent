@@ -120,4 +120,4 @@ http://localhost:8501
 python tests/test_end_to_end.py
 ```
 
-Tests cover document ingestion, retrieval, grounded answers, source references, and handling questions that are not present in the documents.
+Sample documents for testing are included in the tests/ folder. You can download them from the repository and upload them to the application to test document ingestion, retrieval, grounded answers, source references, and questions where the information is not present in the documents.
