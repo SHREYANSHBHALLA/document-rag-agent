@@ -1,22 +1,32 @@
 # Document RAG Agent
 
-A **4-hour AI machine test assignment** to build a document Q&A agent.
+A document question-answering application using Retrieval-Augmented Generation (RAG), hybrid retrieval, and a locally running LLM.
 
-Users can upload one or more **PDF, DOCX, or TXT** files and ask questions based only on their document content.
+## Features
+
+- Upload and query PDF, DOCX, and TXT documents.
+- Parse and chunk documents for retrieval.
+- Generate embeddings using `all-MiniLM-L6-v2`.
+- Hybrid retrieval using ChromaDB vector search and BM25.
+- Weighted Reciprocal Rank Fusion (RRF) to combine retrieval results.
+- Generate answers with source references using Ollama.
+- Return a fallback response when relevant information is not found.
+- Evaluate retrieval performance using Recall@K, Precision@K, and MRR.
+- Experiment with Docling and different chunking strategies.
 
 ## Tech Stack
 
-* **UI:** Streamlit
-* **Workflow:** LangGraph
-* **Vector DB:** Chroma
-* **Embeddings:** `sentence-transformers/all-MiniLM-L6-v2`
-* **LLM:** Ollama + `llama3.2:3b`
-* **Document Processing:** PyMuPDF, python-docx
-* **Language:** Python
+- **Language:** Python
+- **UI:** Streamlit
+- **Vector Database:** ChromaDB
+- **Embeddings:** Sentence Transformers (`all-MiniLM-L6-v2`)
+- **Retrieval:** Vector Search, BM25, Weighted RRF
+- **LLM:** Ollama (`llama3.2:3b`)
+- **Document Processing:** PyMuPDF, python-docx, Docling experiments
 
 ## Architecture
 
-```text id="tie9e6"
+```text
 Upload Documents
        ↓
 Parse & Chunk
@@ -24,100 +34,49 @@ Parse & Chunk
 MiniLM Embeddings
        ↓
 Chroma Vector DB
+
+User Query
        ↓
-LangGraph
+Hybrid Retrieval
+(Vector Search + BM25)
        ↓
-Query Validation (Guardrail)
+Weighted RRF
        ↓
-Retrieve
+Relevant Context
        ↓
-Relevance Check (Guardrail)
-   ↙                    ↘
-Not Relevant          Relevant
-    ↓                    ↓
- Not Found          Generate Answer
-                         ↓
-                        END
-```
-
-## RAG Flow
-
-1. Upload one or more documents.
-2. Documents are parsed and split into chunks.
-3. Chunks are converted into embeddings and stored in Chroma.
-4. The user's question is converted into an embedding.
-5. Chroma retrieves the most relevant chunks.
-6. A relevance check verifies whether useful information was found.
-7. Only relevant chunks are sent to the local LLM.
-8. The answer and source references are displayed.
-
-## Guardrails
-
-The application uses lightweight guardrails:
-
-* Empty questions are rejected.
-* Retrieved content is checked for relevance.
-* If relevant information is not found, the system returns:
-
-```text id="6kbook"
-I couldn't find this information in the uploaded documents.
-```
-
-In this case, the LLM is not called.
-
-The LLM is also instructed to answer only from the retrieved document context and not use outside knowledge.
-
-## Project Structure
-
-```text id="c4ycp9"
-document-rag-agent/
-├── app/
-│   ├── ingestion.py
-│   ├── rag.py
-│   ├── vector_store.py
-│   └── models.py
-├── frontend/
-│   └── streamlit_app.py
-├── tests/
-├── requirements.txt
-├── .env.example
-└── README.md
+Ollama LLM
+       ↓
+Answer + Source References
 ```
 
 ## Setup
 
-```bash id="5ya9s9"
+```bash
 git clone https://github.com/SHREYANSHBHALLA/document-rag-agent.git
 cd document-rag-agent
 
 python -m venv .venv
-.venv\Scripts\activate
-
-python -m pip install -r requirements.txt
 ```
 
-Start Ollama:
+Activate the virtual environment in PowerShell:
 
-```bash id="n7ycz7"
-ollama run llama3.2:3b
+```powershell
+.\.venv\Scripts\Activate.ps1
 ```
 
-Start the application:
+Install dependencies and start Ollama:
 
-```bash id="x7u0rr"
+```bash
+pip install -r requirements.txt
+ollama pull llama3.2:3b
 python -m streamlit run frontend/streamlit_app.py
 ```
 
-Open:
+## Evaluation
 
-```text id="bdfs33"
-http://localhost:8501
-```
+The `docling-test/` directory contains experiments comparing document parsing, chunking strategies, and retrieval performance using a test dataset.
 
-## Testing
+## Author
 
-```bash id="e4sjcv"
-python tests/test_end_to_end.py
-```
-
-Sample documents for testing are included in the tests/ folder. You can download them from the repository and upload them to the application to test document ingestion, retrieval, grounded answers, source references, and questions where the information is not present in the documents.
+Shreyansh Bhalla
+[GitHub](https://github.com/SHREYANSHBHALLA)
