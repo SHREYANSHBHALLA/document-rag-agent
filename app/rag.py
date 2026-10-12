@@ -1,39 +1,56 @@
-"""LangGraph RAG workflow: retrieve relevant chunks, then generate with Ollama."""
+"""Document RAG workflow using hybrid retrieval and Ollama."""
 
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal, TypedDict
+from typing import TypedDict
+import traceback
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
-from langgraph.graph import END, START, StateGraph
 
-from app.vector_store import RetrievedDocument, retrieve_documents
+from app.hybrid_retriever import HybridResult, hybrid_retrieve
 
-# Tune during testing against real MiniLM + Chroma scores. This is not a
-# universal cutoff; it only decides whether retrieved chunks are usable.
+
+# ============================================================
+# Configuration
+# ============================================================
+
+OLLAMA_MODEL = "llama3.2:3b"
+OLLAMA_BASE_URL = "http://127.0.0.1:11434"
+
+VECTOR_K = 20
+BM25_K = 20
+FINAL_K = 5
+CONTEXT_K = 5
+
+# Heuristic only; evaluate against the golden dataset.
 RELEVANCE_SIMILARITY_THRESHOLD = 0.35
 
 NO_RELEVANT_CONTEXT_ANSWER = (
     "I couldn't find this information in the uploaded documents."
 )
-EMPTY_QUERY_ANSWER = "Please enter a question so I can search the uploaded documents."
-OLLAMA_MODEL = "llama3.2:3b"
-RETRIEVAL_K = 5
+
+EMPTY_QUERY_ANSWER = (
+    "Please enter a question so I can search the uploaded documents."
+)
 
 GROUNDING_SYSTEM_PROMPT = """You are a document question-answering assistant.
 
 Answer the user's question ONLY using the provided document context.
 
 Do not use your general knowledge.
-Do not make up or infer facts that are not supported by the context.
+Do not invent or infer unsupported facts.
 If the answer cannot be found in the context, say:
 'I couldn't find this information in the uploaded documents.'
-Do not use source numbers like [1], [2], or [3] in your answer.
+Do not include source numbers like [1], [2], or [3] in your answer.
 Answer the question directly and concisely.
-Keep the answer concise and clear."""
+Keep the answer clear and concise."""
 
+
+# ============================================================
+# State model
+# ============================================================
 
 class SourceRef(TypedDict):
     source: str
@@ -42,163 +59,260 @@ class SourceRef(TypedDict):
 
 class RAGState(TypedDict):
     query: str
-    documents: list[RetrievedDocument]
+    documents: list[HybridResult]
     answer: str
     sources: list[SourceRef]
     is_relevant: bool
 
 
-def query_guardrail(state: RAGState) -> dict:
-    """Reject empty or whitespace-only queries without calling an LLM."""
-    query = (state.get("query") or "").strip()
+# ============================================================
+# Query validation
+# ============================================================
+
+def query_guardrail(query: str) -> str:
+    """Reject empty questions before retrieval."""
+
+    query = (query or "").strip()
+
     if not query:
-        return {
-            "query": query,
-            "answer": EMPTY_QUERY_ANSWER,
-            "documents": [],
-            "sources": [],
-            "is_relevant": False,
-        }
-    return {
-        "query": query,
-        "answer": "",
-        "documents": [],
-        "sources": [],
-        "is_relevant": False,
-    }
+        raise ValueError(EMPTY_QUERY_ANSWER)
+
+    return query
 
 
-def retrieve(state: RAGState) -> dict:
-    """Fetch the top-k nearest chunks for the guarded query."""
-    documents = retrieve_documents(state["query"], k=RETRIEVAL_K)
-    return {"documents": documents}
+# ============================================================
+# Hybrid retrieval
+# ============================================================
 
+def retrieve(query: str) -> list[HybridResult]:
+    """Retrieve using Vector Search + BM25 + weighted RRF."""
 
-def relevance_check(state: RAGState) -> dict:
-    """Keep chunks above the similarity threshold; otherwise refuse to answer."""
-    relevant = [
-        doc
-        for doc in state.get("documents") or []
-        if doc.similarity >= RELEVANCE_SIMILARITY_THRESHOLD
-    ]
-    if not relevant:
-        return {
-            "documents": [],
-            "sources": [],
-            "is_relevant": False,
-            "answer": NO_RELEVANT_CONTEXT_ANSWER,
-        }
-
-    sources = _unique_sources(relevant)
-    return {
-        "documents": relevant,
-        "sources": sources,
-        "is_relevant": True,
-        "answer": "",
-    }
-
-
-def generate_answer(state: RAGState) -> dict:
-    """Call Ollama only when retrieved context is relevant."""
-    if not state.get("is_relevant"):
-        return {}
-
-    documents = state.get("documents") or []
-    generated = _call_ollama(state["query"], documents)
-    source_lines = "\n".join(
-        format_source_line(item["source"], item["page"])
-        for item in state.get("sources") or []
+    return hybrid_retrieve(
+        query,
+        vector_k=VECTOR_K,
+        bm25_k=BM25_K,
+        final_k=FINAL_K,
     )
-    answer = generated.strip()
-    if source_lines:
-        answer = f"{answer}\n\n{source_lines}"
-    return {"answer": answer}
 
 
-def format_source_line(source: str, page: int | None) -> str:
-    """Format a source citation; omit page when it is None (DOCX/TXT)."""
+# ============================================================
+# Relevance check
+# ============================================================
+
+def relevance_check(
+    documents: list[HybridResult],
+) -> list[HybridResult]:
+    """Keep candidates with a positive lexical or vector signal."""
+
+    return [
+        doc
+        for doc in documents
+        if (
+            doc.bm25_score is not None
+            and doc.bm25_score > 0
+        )
+        or (
+            doc.vector_similarity is not None
+            and doc.vector_similarity
+            >= RELEVANCE_SIMILARITY_THRESHOLD
+        )
+    ]
+
+
+# ============================================================
+# Source formatting
+# ============================================================
+
+def format_source_line(
+    source: str,
+    page: int | None,
+) -> str:
+    """Format the source citation."""
+
     if page is None:
         return f"Source: {source}"
+
     return f"Source: {source}, Page {page}"
 
 
-def _unique_sources(documents: list[RetrievedDocument]) -> list[SourceRef]:
+def unique_sources(
+    documents: list[HybridResult],
+) -> list[SourceRef]:
+    """Return unique source/page pairs."""
+
     seen: set[tuple[str, int | None]] = set()
     sources: list[SourceRef] = []
+
     for document in documents:
         key = (document.source, document.page)
+
         if key in seen:
             continue
+
         seen.add(key)
-        sources.append({"source": document.source, "page": document.page})
+        sources.append({
+            "source": document.source,
+            "page": document.page,
+        })
+
     return sources
 
 
-def _format_context(documents: list[RetrievedDocument]) -> str:
+def format_context(
+    documents: list[HybridResult],
+) -> str:
+    """Format chunks and available structural metadata."""
+
     blocks: list[str] = []
+
     for index, document in enumerate(documents, start=1):
-        citation = format_source_line(document.source, document.page)
-        blocks.append(f"[{index}] {citation}\n{document.text}")
+        details = [
+            format_source_line(
+                document.source,
+                document.page,
+            )
+        ]
+
+        if document.section_type:
+            details.append(
+                f"Section type: {document.section_type}"
+            )
+
+        if document.section_title:
+            details.append(
+                f"Section: {document.section_title}"
+            )
+
+        blocks.append(
+            f"[{index}] {' | '.join(details)}\n{document.text}"
+        )
+
     return "\n\n".join(blocks)
 
 
-def _call_ollama(query: str, documents: list[RetrievedDocument]) -> str:
-    """Send only the relevant chunks plus the question to the local Ollama model."""
+# ============================================================
+# Ollama answer generation
+# ============================================================
+
+@lru_cache(maxsize=1)
+def _get_llm() -> ChatOllama:
+    return ChatOllama(
+        model=OLLAMA_MODEL,
+        temperature=0,
+        base_url=OLLAMA_BASE_URL,
+        num_ctx=4096,
+        num_predict=256,
+    )
+
+
+def call_ollama(
+    query: str,
+    documents: list[HybridResult],
+) -> str:
+    """Generate a grounded answer from retrieved chunks."""
+
+    context_documents = documents[:CONTEXT_K]
+    context = format_context(context_documents)
+
+    print("\n--- CONTEXT PREVIEW ---")
+    print(context[:2000])
+    print(
+        "Context chunk sizes:",
+        [len(doc.text) for doc in context_documents],
+    )
+    print("Context characters:", len(context))
+
     user_prompt = (
-        f"Context:\n{_format_context(documents)}\n\n"
+        f"Context:\n{context}\n\n"
         f"Question: {query}"
     )
+
+    print("[RAG] Sending context to Ollama...")
+    print("[RAG] Calling model:", OLLAMA_MODEL)
+    print("[RAG] Context characters:", len(context))
+
     response = _get_llm().invoke(
         [
             SystemMessage(content=GROUNDING_SYSTEM_PROMPT),
             HumanMessage(content=user_prompt),
         ]
     )
+
     content = response.content
+
     if isinstance(content, str):
-        return content
-    return str(content)
+        return content.strip()
+
+    return str(content).strip()
 
 
-@lru_cache(maxsize=1)
-def _get_llm() -> ChatOllama:
-    return ChatOllama(model=OLLAMA_MODEL, temperature=0)
-
-
-def _route_after_guardrail(state: RAGState) -> Literal["retrieve", "__end__"]:
-    if state.get("answer"):
-        return "__end__"
-    return "retrieve"
-
-
-@lru_cache(maxsize=1)
-def build_rag_graph():
-    """Compile START → guardrail → retrieve → relevance → generate → END."""
-    graph = StateGraph(RAGState)
-    graph.add_node("query_guardrail", query_guardrail)
-    graph.add_node("retrieve", retrieve)
-    graph.add_node("relevance_check", relevance_check)
-    graph.add_node("generate_answer", generate_answer)
-    graph.add_edge(START, "query_guardrail")
-    graph.add_conditional_edges(
-        "query_guardrail",
-        _route_after_guardrail,
-        {"retrieve": "retrieve", "__end__": END},
-    )
-    graph.add_edge("retrieve", "relevance_check")
-    graph.add_edge("relevance_check", "generate_answer")
-    graph.add_edge("generate_answer", END)
-    return graph.compile()
-
+# ============================================================
+# Main RAG workflow — no LangGraph
+# ============================================================
 
 def run_rag(query: str) -> RAGState:
-    """Execute the RAG graph for a single user question."""
-    return build_rag_graph().invoke(
-        {
+    """Validate, retrieve, check relevance, and generate an answer."""
+
+    print("[RAG] Validating query...")
+    query = query_guardrail(query)
+
+    try:
+        # 1. Hybrid retrieval: Vector Top-20 + BM25 Top-20 -> RRF Top-10.
+        print("[RAG] Running hybrid retrieval...")
+        retrieved_documents = retrieve(query)
+
+        print(
+            f"[RAG] Retrieved {len(retrieved_documents)} chunks."
+        )
+
+        # Temporary diagnostic output for retrieval ranking.
+        print("\n--- FINAL HYBRID RESULTS ---")
+        for index, doc in enumerate(retrieved_documents, start=1):
+            print(
+                index,
+                f"page={doc.page}",
+                f"section={doc.section_title}",
+                doc.text[:120].replace("\n", " "),
+            )
+
+        # 2. Basic relevance check.
+        print("[RAG] Checking relevance...")
+        relevant_documents = relevance_check(retrieved_documents)
+        print(
+            f"[RAG] Relevant chunks: {len(relevant_documents)}"
+        )
+
+        if not relevant_documents:
+            return {
+                "query": query,
+                "documents": [],
+                "answer": NO_RELEVANT_CONTEXT_ANSWER,
+                "sources": [],
+                "is_relevant": False,
+            }
+
+        # 3. Preserve citations for the returned chunks.
+        sources = unique_sources(relevant_documents)
+
+        # 4. Generate a grounded answer.
+        print("[RAG] Calling Ollama...")
+        answer = call_ollama(
+            query,
+            relevant_documents,
+        )
+        print("[RAG] Ollama response received.")
+
+      
+        # 5. Return the answer and sources separately.
+        return {
             "query": query,
-            "documents": [],
-            "answer": "",
-            "sources": [],
-            "is_relevant": False,
+            "documents": relevant_documents,
+            "answer": answer,
+            "sources": sources,
+            "is_relevant": True,
         }
-    )
+
+    except Exception:
+        print("[RAG] Workflow failed. Full traceback:")
+        traceback.print_exc()
+        raise

@@ -1,0 +1,104 @@
+[
+  {
+    "question": "What is Retrieval-Augmented Generation (RAG)?",
+    "gold_passages": [
+      "Retrieval-Augmented Generation (RAG) enhances LLMs by retrieving relevant document chunks from external knowledge base through semantic similarity calculation.",
+      "By referencing external knowledge, RAG effectively reduces the problem of generating factually incorrect content."
+    ]
+  },
+  {
+    "question": "What limitations of large language models does RAG address?",
+    "gold_passages": [
+      "LARGE language models (LLMs) have achieved remarkable success, though they still face significant limitations, especially in domain-specific or knowledge-intensive tasks",
+      "notably producing \"hallucinations\" when handling queries beyond their training data or requiring current information."
+    ]
+  },
+  {
+    "question": "How does RAG help reduce hallucinations?",
+    "gold_passages": [
+      "By referencing external knowledge, RAG effectively reduces the problem of generating factually incorrect content."
+    ]
+  },
+  {
+    "question": "What are the three main RAG paradigms discussed in the paper?",
+    "gold_passages": [
+      "The RAG research paradigm is continuously evolving, and we categorize it into three stages: Naive RAG, Advanced RAG, and Modular RAG"
+    ]
+  },
+  {
+    "question": "What is Naive RAG?",
+    "gold_passages": [
+      "The Naive RAG research paradigm represents the earliest methodology, which gained prominence shortly after the widespread adoption of ChatGPT.",
+      "The Naive RAG follows a traditional process that includes indexing, retrieval, and generation, which is also characterized as a \"Retrieve-Read\" framework"
+    ]
+  },
+  {
+    "question": "What are the main stages of the Naive RAG process?",
+    "gold_passages": [
+      "It mainly consists of 3 steps. 1) Indexing. Documents are split into chunks, encoded into vectors, and stored in a vector database. 2) Retrieval. Retrieve the Top k chunks most relevant to the question based on semantic similarity. 3) Generation. Input the original question and the retrieved chunks together into LLM to generate the final answer."
+    ]
+  },
+  {
+    "question": "What is Advanced RAG?",
+    "gold_passages": [
+      "Advanced RAG introduces specific improvements to overcome the limitations of Naive RAG. Focusing on enhancing retrieval quality, it employs pre-retrieval and post-retrieval strategies.",
+      "To tackle the indexing issues, Advanced RAG refines its indexing techniques through the use of a sliding window approach, fine-grained segmentation, and the incorporation of metadata."
+    ]
+  },
+  {
+    "question": "What is Modular RAG?",
+    "gold_passages": [
+      "The modular RAG architecture advances beyond the former two RAG paradigms, offering enhanced adaptability and versatility.",
+      "It incorporates diverse strategies for improving its components, such as adding a search module for similarity searches and refining the retriever through fine-tuning."
+    ]
+  },
+  {
+    "question": "What is the role of retrieval in RAG?",
+    "gold_passages": [
+      "In the context of RAG, it is crucial to efficiently retrieve relevant documents from the data source.",
+      "The system prioritizes and retrieves the top K chunks that demonstrate the greatest similarity to the query. These chunks are subsequently used as the expanded context in prompt."
+    ]
+  },
+  {
+    "question": "What is the role of generation in RAG?",
+    "gold_passages": [
+      "The posed query and selected documents are synthesized into a coherent prompt to which a large language model is tasked with formulating a response.",
+      "The model's approach to answering may vary depending on task-specific criteria, allowing it to either draw upon its inherent parametric knowledge or restrict its responses to the information contained within the provided documents."
+    ]
+  },
+  {
+    "question": "What is the role of augmentation in RAG?",
+    "gold_passages": [
+      "In the domain of RAG, the standard practice often involves a singular (once) retrieval step followed by generation, which can lead to inefficiencies and sometimes is typically insufficient for complex problems demanding multi-step reasoning, as it provides a limited scope of information.",
+      "Many studies have optimized the retrieval process in response to this issue"
+    ]
+  },
+  {
+    "question": "Why is external knowledge useful for large language models?",
+    "gold_passages": [
+      "Given ChatGPT's reliance on pretraining data, it initially lacks the capacity to provide updates on recent developments.",
+      "RAG bridges this information gap by sourcing and incorporating knowledge from external databases."
+    ]
+  },
+  {
+    "question": "How has RAG evolved with the emergence of large language models?",
+    "gold_passages": [
+      "The subsequent arrival of ChatGPT marked a pivotal moment, with LLM demonstrating powerful in context learning (ICL) capabilities.",
+      "RAG research shifted towards providing better information for LLMs to answer more complex and knowledge-intensive tasks during the inference stage, leading to rapid development in RAG studies."
+    ]
+  },
+  {
+    "question": "What metrics are commonly used to evaluate RAG retrieval quality?",
+    "gold_passages": [
+      "Metrics such as Hit Rate, MRR, and NDCG are commonly utilized for this purpose.",
+      "Retrieval Quality. Evaluating the retrieval quality is crucial for determining the effectiveness of the context sourced by the retriever component."
+    ]
+  },
+  {
+    "question": "What challenges do current RAG systems face?",
+    "gold_passages": [
+      "Despite the considerable progress in RAG technology, several challenges persist that warrant in-depth research.",
+      "However, enhancing retrieval efficiency, improving document recall in large knowledge bases, and ensuring data security-such as preventing inadvertent disclosure of document sources or metadata by LLMs-are critical engineering challenges that remain to be addressed."
+    ]
+  }
+]

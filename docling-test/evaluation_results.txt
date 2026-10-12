@@ -1,0 +1,42 @@
+RAG RETRIEVAL EVALUATION
+================================================================================
+
+Configuration
+Embedding model: sentence-transformers/all-MiniLM-L6-v2
+Vector candidate K: 15
+BM25 candidate K: 15
+Final K: 5
+RRF constant: 60
+Recursive chunk size: 800
+Recursive overlap: 100
+Semantic breakpoint: 90
+
+Dataset Statistics
+----------------------------------------
+Markdown sections: 34
+Recursive chunks: 228
+Recursive filtered chunks: 177
+Semantic chunks: 229
+Semantic filtered chunks: 94
+Golden questions: 15
+
+FINAL RETRIEVAL EVALUATION RESULTS
+======================================================================================================================================================
+Configuration                                R@1     P@1     R@3     P@3     R@5     P@5     MRR      Vector        BM25         RRF       Total
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Recursive Vector                           0.133   0.133   0.533   0.178   0.600   0.120   0.350       15.01        0.00        0.00       15.01
+Recursive Vector + Metadata                0.200   0.200   0.533   0.178   0.600   0.120   0.383       13.58        0.00        0.00       13.58
+Recursive Hybrid                           0.333   0.333   0.733   0.244   0.733   0.147   0.511       15.01        0.78        0.07       15.85
+Recursive Hybrid + Metadata                0.400   0.400   0.733   0.244   0.733   0.147   0.544       13.58        0.60        0.05       14.23
+Semantic Vector                            0.267   0.267   0.400   0.133   0.533   0.107   0.352       19.71        0.00        0.00       19.71
+Semantic Vector + Metadata                 0.267   0.267   0.467   0.156   0.600   0.120   0.386       15.34        0.00        0.00       15.34
+Semantic Hybrid                            0.267   0.267   0.600   0.200   0.600   0.120   0.411       19.71        0.75        0.07       20.53
+Semantic Hybrid + Metadata                 0.467   0.467   0.667   0.222   0.667   0.147   0.544       15.34        0.39        0.05       15.78
+======================================================================================================================================================
+
+Metric Definitions
+----------------------------------------
+Recall@K: whether at least one relevant chunk appears in top K.
+Precision@K: proportion of the top K chunks marked relevant.
+MRR: reciprocal rank of the first relevant chunk.
+Vector/BM25/RRF/Total times are retrieval-stage timings in milliseconds.
